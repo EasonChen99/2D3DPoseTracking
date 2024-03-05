@@ -176,7 +176,7 @@ class LSGC:
 
         x0 = torch.hstack((cur_cameras, next_cameras)).cpu().numpy()
         res = least_squares(self.func, x0,
-                            verbose=1, x_scale='jac',
+                            verbose=0, x_scale='jac',
                             ftol=1e-8, xtol=1e-8, gtol=1e-8,
                             method='lm', max_nfev=500)
 
