@@ -16,5 +16,5 @@ python run_odometry_kitti.py --load_checkpoints ./checkpoints/checkpoints.pth --
 ## Acknowledgments
 The code is based on [I2D-Loc](https://github.com/EasonChen99/I2D-Loc) and [RAFT](https://github.com/princeton-vl/RAFT).
 
-### Under review
+## Under review
 The full source code used in our study will be released upon paper acceptance. 
