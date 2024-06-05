@@ -6,14 +6,20 @@ import pykitti
 import mathutils
 import visibility as visibility
 import sys
-sys.path.append('core')
-from utils_point import rotate_back, mat2xyzrpy, overlay_imgs, invert_pose, to_rotation_matrix
+sys.path.append('/home/cky/2D3DRegistration/I2D_VO/core')
+from utils_point import rotate_back, quaternion_from_matrix, mat2xyzrpy, overlay_imgs, invert_pose, to_rotation_matrix
+from flow_viz import flow_to_image
 from data_preprocess import Data_preprocess
 from camera_model import CameraModel
-from scipy.optimize import least_squares
+from scipy.optimize import least_squares, minimize
+from scipy.sparse import lil_matrix
+from scipy.misc import derivative
 import cv2
+from concurrent.futures import ThreadPoolExecutor
 
 class LSGC:
+    """Least Square and Bundle Adjust """
+
     def __init__(self, flow, local_map, point2d_cur, point2d_next,
                  calib, real_shape,
                  occlusion_threshold, occlusion_kernel,
@@ -83,14 +89,16 @@ class LSGC:
         cur_r = mathutils.Quaternion(cur_r).to_matrix()
         cur_r.resize_4x4()
         cur_t = mathutils.Matrix.Translation(cur_t)
-        RT_cur = cur_t * cur_r
+        # RT_cur = cur_t * cur_r
+        RT_cur = mathutils.Matrix(np.matmul(np.asarray(cur_t), np.asarray(cur_r)))
         RT_cur = torch.tensor(RT_cur, dtype=torch.float).to(self.device)
         next_r = cameras_parameter[1, :3]
         next_t = cameras_parameter[1, 3:6]
         next_r = mathutils.Quaternion(next_r).to_matrix()
         next_r.resize_4x4()
         next_t = mathutils.Matrix.Translation(next_t)
-        RT_next = next_r * next_t
+        # RT_next = next_r * next_t
+        RT_next = mathutils.Matrix(np.matmul(np.asarray(next_t), np.asarray(next_r)))
         RT_next = torch.tensor(RT_next, dtype=torch.float).to(self.device)
 
         return RT_cur, RT_next
@@ -155,6 +163,18 @@ class LSGC:
 
         return np.concatenate((residues_flow, 1e-3 * residues_reproj))
 
+    def jac(self, parameters):
+        J = []
+        for i in range(len(parameters)):
+            def fp(xi):
+                xx = np.copy(parameters)
+                xx[i] = xi
+                return self.func(xx)
+            j = derivative(fp, parameters[i], dx=1e-6, n=1)
+            J.append(j)
+        J = np.array(J)
+        return J.transpose()
+
     def visualizationRT(self, RT, img, img_name):
         RT = torch.mm(torch.mm(self.velo2cam2, RT.inverse()), self.velo2cam2.inverse())
         pc_rotated = rotate_back(torch.mm(self.Pc_vel2cam, self.local_map), RT)
@@ -167,6 +187,7 @@ class LSGC:
 
         return out0
 
+
     def run(self, RT_pred, RT_pred_next, count=0):
         ## initial camera parameter
         cur_rt = mat2xyzrpy(RT_pred)
@@ -178,9 +199,12 @@ class LSGC:
         res = least_squares(self.func, x0,
                             verbose=0, x_scale='jac',
                             ftol=1e-8, xtol=1e-8, gtol=1e-8,
+                            # ftol=1e-12, xtol=1e-12, gtol=1e-12,
                             method='lm', max_nfev=500)
 
-        if count <= 99 and np.sum(self.func(res.x, flag=1)) == 0:
+        # identify whether overlay exists or not
+        if count <= 10 and np.sum(self.func(res.x, flag=1)) == 0:
+            # print("No overlap", count, "*"*70)
             max_angle = 0.01
             max_t = 0.01
             rotz = np.random.uniform(-max_angle, max_angle) * (3.141592 / 180.0)
