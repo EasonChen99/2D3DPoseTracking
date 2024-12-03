@@ -1,6 +1,6 @@
 # 2D3DPoseTracking
 
-### Check out our new paper "Tracking Camera Poses in LiDAR Maps with Multi-View Geometric Constraints":
+### Check out our new paper "I2D-Loc++: Camera Pose Tracking in LiDAR Maps with Multi-View Motion Flows":
 * [Video](https://www.youtube.com/watch?v=oZm4Z-XEeBk)
 
 [<img src="video-preview.png" width="512">](https://www.youtube.com/watch?v=oZm4Z-XEeBk) 
@@ -15,6 +15,3 @@ python run_odometry_kitti.py --load_checkpoints ./checkpoints/checkpoints.pth --
 
 ## Acknowledgments
 The code is based on [I2D-Loc](https://github.com/EasonChen99/I2D-Loc) and [RAFT](https://github.com/princeton-vl/RAFT).
-
-## Under review
-The full source code used in our study will be released upon paper acceptance. 
