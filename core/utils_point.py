@@ -99,7 +99,8 @@ def invert_pose(R, T):
     R = R.to_matrix()
     R.resize_4x4()
     T = mathutils.Matrix.Translation(T)
-    RT = T * R
+    # RT = T * R
+    RT = mathutils.Matrix(np.matmul(np.asarray(T), np.asarray(R)))
     RT.invert_safe()
     T_GT, R_GT, _ = RT.decompose()
     return R_GT.normalized(), T_GT
@@ -293,7 +294,10 @@ def xyzrpy2mat(xyzrpy):
 def to_rotation_matrix(R, T):
     R = quat2mat(R)
     T = tvector2mat(T)
+    # print(R)
+    # print(T)
     RT = torch.mm(T, R)
+    # print(RT)
     return RT
 
 def rotation_vector_to_euler(rvecs):
@@ -316,11 +320,11 @@ def rotation_vector_to_euler(rvecs):
 
 
 def overlay_imgs(rgb, lidar):
-    std = [0.229, 0.224, 0.225]
-    mean = [0.485, 0.456, 0.406]
+    # std = [0.229, 0.224, 0.225]
+    # mean = [0.485, 0.456, 0.406]
 
     rgb = rgb.clone().cpu().permute(1,2,0).numpy()
-    rgb = rgb*std+mean
+    # rgb = rgb*std+mean
 
     # rgb = cv2.resize(rgb, (120, 40))
     # lidar = lidar.cpu().numpy()

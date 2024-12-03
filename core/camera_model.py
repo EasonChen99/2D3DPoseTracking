@@ -44,7 +44,7 @@ class CameraModel:
         else:
             if not torch.all(xyz[3, :] == 1.):
                 xyz[3, :] = 1.
-                raise TypeError("Wrong Coordinates")
+                # raise TypeError("Wrong Coordinates")
         order = [1, 2, 0, 3]
         xyzw = xyz[order, :]
         indexes = xyzw[2, :] >= 0

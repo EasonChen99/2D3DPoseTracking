@@ -11,7 +11,7 @@ from camera_model import CameraModel
 from utils_point import invert_pose, quat2mat, tvector2mat, quaternion_from_matrix, rotation_vector_to_euler
 from quaternion_distances import quaternion_distance
 
-def Flow2Pose(flow_up, depth, calib, return_medium=False, dataset="KITTI"):
+def Flow2Pose(flow_up, depth, calib, return_medium=False, x=28, y=140):
     device = flow_up.device
 
     output = torch.zeros(flow_up.shape).to(device)
@@ -33,10 +33,6 @@ def Flow2Pose(flow_up, depth, calib, return_medium=False, dataset="KITTI"):
 
     cam_model = CameraModel()
     cam_params = calib.cpu().numpy()
-    if dataset == "KITTI":
-        x, y = 28, 140
-    else:
-        sys.exit()
     cam_params[2] = cam_params[2] + 480 - (y + y + 960) / 2.
     cam_params[3] = cam_params[3] + 160 - (x + x + 320) / 2.
     cam_model.focal_length = cam_params[:2]
@@ -44,7 +40,6 @@ def Flow2Pose(flow_up, depth, calib, return_medium=False, dataset="KITTI"):
     cam_mat = np.array([[cam_params[0], 0, cam_params[2]], [0, cam_params[1], cam_params[3]], [0, 0, 1.]])
 
     pts3d, pts2d, match_index = cam_model.deproject_pytorch(depth_img, pc_project_uv[0, :, :, :])
-
     if pts3d.shape[0] < 4:
         raise ValueError("PnP fail")
     ret, rvecs, tvecs, inliers = cv2.solvePnPRansac(pts3d, pts2d, cam_mat, None)
@@ -55,12 +50,8 @@ def Flow2Pose(flow_up, depth, calib, return_medium=False, dataset="KITTI"):
     R, T = invert_pose(R, T)
     R, T = torch.tensor(R), torch.tensor(T)
 
-    if dataset == "KITTI":
-        R_predicted = R[[0, 3, 1, 2]]
-        T_predicted = T[[2, 0, 1]]
-    else:
-        # Please revise here according to specific condition
-        raise ValueError("PnP fail")
+    R_predicted = R[[0, 3, 1, 2]]
+    T_predicted = T[[2, 0, 1]]
 
     if return_medium:
         return R_predicted, T_predicted, depth_img, pc_project_uv[0, :, :, :]

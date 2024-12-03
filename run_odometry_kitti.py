@@ -190,7 +190,35 @@ def main(args):
     # load model parameters
     model = torch.nn.DataParallel(I2D_VO(args), device_ids=args.gpus)
     print("Parameter Count: %d" % count_parameters(model))
+    # if args.load_checkpoints is not None:
+    #     if not args.tight_couple:
+    #         checkpoints = torch.load(args.load_checkpoints)
+    #         from collections import OrderedDict
+    #         new_state_dict = OrderedDict()
+    #         for k, v in checkpoints.items():
+    #             # if k[23] == "a":
+    #             #     k = k[:22] + k[24:]
+    #             #     new_state_dict[k] = v
+    #             k = k[:7] + "image2depth_net_a." + k[7:]
+    #             new_state_dict[k] = v
+    #             # k = k[:22] + "_a" + k[22:]
+    #             # new_state_dict[k] = v
+    #         model.load_state_dict(new_state_dict)
+    #     else:
+    #         model.load_state_dict(torch.load(args.load_checkpoints))
+    #     print(f"load checkpoints: {args.load_checkpoints}")
+    # torch.save(model.state_dict(), f"./checkpoints/I2D_VO_merge.pth")
+    # sys.exit()
     model.load_state_dict(torch.load(args.load_checkpoints, map_location='cuda:0'))
+    # checkpoints_2d = torch.load(args.cps_2d)
+    # from collections import OrderedDict
+    # new_state_dict = torch.load(args.load_checkpoints)
+    # for k, v in checkpoints_2d.items():
+    #     key = 'module.image2image_net' + k[6:]
+    #     new_state_dict[key] = v
+    # model.load_state_dict(new_state_dict, strict=False)
+    # torch.save(model.state_dict(), f"./checkpoints/I2D_VO_merge_large.pth")
+    # sys.exit()
     model.to(device)
     model.eval()
 
@@ -356,6 +384,11 @@ def main(args):
             depth_img_common = np.zeros(depth_img_cur.shape, dtype=depth_img_cur.dtype)
             depth_img_common[depth_img_mask] = depth_img_cur[depth_img_mask]
             point3d_common = cam_model.depth2pc(depth_img_common) # LiDAP_map * pose^-1
+            # original_overlay = overlay_imgs(cur[0, :, :, :], torch.tensor(depth_img_cur * depth_img_mask, device=cur.device))
+            # cv2.imwrite(f"./visualization/cur.png", original_overlay)
+            # original_overlay = overlay_imgs(next[0, :, :, :], torch.tensor(depth_img_next * depth_img_mask, device=cur.device))
+            # cv2.imwrite(f"./visualization/next.png", original_overlay)
+            # sys.exit()
 
             # generate corresponding 2d points
             pc_project_uv_cur_u = pc_project_uv_cur[:, :, 0][depth_img_mask]
@@ -370,10 +403,15 @@ def main(args):
                                calib, real_shape,
                                occlusion_threshold, occlusion_kernel,
                                velo2cam2, device, x, y)
+            # print("RT_pred", RT_pred)
             opti_RT_cur, opti_RT_next = LSGC_solver.run(RT_pred, RT_pred_next)
+            # print("opti_RT_cur", opti_RT_cur)
 
             RT_new = torch.mm(RT, opti_RT_cur)
             RT_new_next = torch.mm(RT, opti_RT_next)
+
+            # RT_new = torch.mm(RT, RT_pred)
+            # RT_new_next = torch.mm(RT, RT_pred_next)
 
             predicted_R_next = quaternion_from_matrix(RT_new_next)
             predicted_T_next = RT_new_next[:3, 3]
@@ -412,9 +450,51 @@ def main(args):
             log_file.writerow(log_string)
 
         if args.render:
+            # sparse[sparse == 1000.] = 0.
+            # valid = sparse[0, 0, :, :] > 0
+            # mask = torch.cat((valid.unsqueeze(2), valid.unsqueeze(2)), dim=2)
+            # Mask = torch.cat((valid.unsqueeze(2), valid.unsqueeze(2), valid.unsqueeze(2)), dim=2)
+            # Mask = Mask.cpu().detach().numpy()
+            # flow_cur = flow_to_image(flow_up_cur[0].permute(1, 2, 0).detach().cpu().numpy())
+            # # flow_cur = flow_to_image(flow_up_cur[0].permute(1, 2, 0).detach().cpu().numpy() * mask.cpu().detach().numpy())
+            # # flow_cur[~Mask] = 0
+            # cv2.imwrite(f"./visualization/flow_cur/{idx:05d}.png", flow_cur)
+            # flow_next = flow_to_image(flow_up_next[0].permute(1, 2, 0).detach().cpu().numpy())
+            # # flow_next = flow_to_image(flow_up_next[0].permute(1, 2, 0).detach().cpu().numpy() * mask.cpu().detach().numpy())
+            # # flow_next[~Mask] = 0
+            # cv2.imwrite(f"./visualization/flow_next/{idx:05d}.png", flow_next)
+            # flow_cur2next = flow_to_image(flow_up[0].permute(1, 2, 0).cpu().detach().numpy())
+            # cv2.imwrite(f"./visualization/flow_cur2next/{idx:05d}.png", flow_cur2next)
+
             original_overlay = overlay_imgs(cur[0, :, :, :], sparse[0, 0, :, :])
             cv2.imwrite(f"./visualization/cur/{idx:05d}.png", original_overlay)
-        
+        # original_overlay = overlay_imgs(next[0, :, :, :], sparse[0, 0, :, :])
+        # cv2.imwrite(f"./visualization/next/{idx:05d}.png", original_overlay)
+        # # RT = to_rotation_matrix(predicted_R, predicted_T)
+        # # RT = RT.to(device)
+        # # local_map_cur = crop_local_map(vox_map, RT, velo2cam2)
+        # # RT = to_rotation_matrix(predicted_R_next, predicted_T_next)
+        # # RT = RT.to(device)
+        # # local_map_next = crop_local_map(vox_map, RT, velo2cam2)
+        # # projected_points_cur = depth_generation(local_map_cur, real_shape, calib, occlusion_threshold, occlusion_kernel, device)
+        # # projected_points_next = depth_generation(local_map_next, real_shape, calib, occlusion_threshold, occlusion_kernel, device)
+        # # sparse_cur = projected_points_cur[:, x:x + 320, y:y + 960]
+        # # sparse_cur = sparse_cur.unsqueeze(0)
+        # # sparse_next = projected_points_next[:, x:x + 320, y:y + 960]
+        # # sparse_next = sparse_next.unsqueeze(0)
+        # # original_overlay = overlay_imgs(cur[0, :, :, :], sparse_cur[0, 0, :, :])
+        # # cv2.imwrite(f"./visualization/cur_2/{idx:05d}.png", original_overlay)
+        # # original_overlay = overlay_imgs(next[0, :, :, :], sparse_next[0, 0, :, :])
+        # # cv2.imwrite(f"./visualization/next_2/{idx:05d}.png", original_overlay)
+        # # sparse[sparse == 1000.] = 0.
+        # # mask = sparse[0, 0, :, :] > 0
+        # # mask = torch.cat((mask.unsqueeze(2), mask.unsqueeze(2), mask.unsqueeze(2)), dim=2)
+        # # flow_cur = flow_to_image(flow_up_cur[0].permute(1, 2, 0).detach().cpu().numpy() * mask.cpu().detach().numpy())
+        # # cv2.imwrite(f"./visualization/flow_cur/{idx:05d}.png", flow_cur)
+        # # flow_next = flow_to_image(flow_up_next[0].permute(1, 2, 0).detach().cpu().numpy() * mask.cpu().detach().numpy())
+        # # cv2.imwrite(f"./visualization/flow_next/{idx:05d}.png", flow_next)
+        # # flow_cur2next = flow_to_image(flow_up[0].permute(1, 2, 0).cpu().detach().numpy())
+        # # cv2.imwrite(f"./visualization/flow_cur2next/{idx:05d}.png", flow_cur2next)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -427,6 +507,9 @@ if __name__ == '__main__':
     parser.add_argument('--iters', type=int, default=20)
     parser.add_argument('--use_reflectance', action='store_true')
     parser.add_argument('-cps', '--load_checkpoints', type=str)
+    # parser.add_argument('--cps_cur', type=str)
+    # parser.add_argument('--cps_next', type=str)
+    # parser.add_argument('--cps_2d', type=str)
     parser.add_argument('--loose_couple', action='store_true')
     parser.add_argument('--tight_couple', action='store_true')
     parser.add_argument('--maps_file', type=str, default='/media/eason/e835c718-d773-44a1-9ca4-881204d9b53d/Datasets/KITTI/sequences/00/map-00.pcd')

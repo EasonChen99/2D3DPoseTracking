@@ -101,6 +101,14 @@ class Data_preprocess:
         rgb_input = []
         flow_gt = []
 
+        # train multiple models
+        # if split == 'train':
+        #     x = np.random.randint(0, rgbs[0].shape[1] - 320)
+        #     y = np.random.randint(0, rgbs[0].shape[2] - 960)
+        # else:
+        #     x = (rgbs[0].shape[1] - 320) // 2
+        #     y = (rgbs[0].shape[2] - 960) // 2
+
         for idx in range(len(rgbs)):
             # train single model
             if split == 'train':
@@ -129,6 +137,13 @@ class Data_preprocess:
                 pc_rotated = rotate_back(pc_rotated, RT_errs[0])
             else:
                 pc_rotated = rotate_back(pc, RT)
+
+            # pc_rotated = rotate_back(torch.mm(Pc_vel2cam, pc), RT[1, ...])
+            # pc_rotated = torch.mm(Pc_cam2vel, pc_rotated)
+            # pc_rotated = rotate_back(pc_rotated, RT[0, ...])
+
+            # pc_rotated = rotate_back(pc, RT)
+
 
             cam_params = self.calibs[idx]
             cam_model = CameraModel()
@@ -170,6 +185,7 @@ class Data_preprocess:
             depth_img_no_occlusion_RT_training, indexes_uvRT_deoccl_training = \
                 self.gen_depth_img(uv_RT, depth_RT, VI_indexes_RT[VI_indexes_RT], cam_params)
 
+            ## 这里归一化的时候是不是重新计算一下最大深度比较好
             depth_img_no_occlusion_RT_training /= 100.
 
             depth_img_no_occlusion_RT_training = depth_img_no_occlusion_RT_training.unsqueeze(0)

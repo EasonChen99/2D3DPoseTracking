@@ -142,15 +142,53 @@ class LSGC:
         return delta_img, cur_uv_noindex.cpu().detach().numpy(), next_uv_noindex.cpu().detach().numpy()
 
 
+    # def func(self, parameters, flag=0, indices=None):
+    #     RT_cur, RT_next = self.xyzrpy2mat(parameters)
+    #     indices = np.array(indices)
+    #
+    #     equal_flow, cur_uv, next_uv = self.makeEquFLow(RT_cur, RT_next, self.local_map[:, indices])
+    #
+    #     # flow error
+    #     mask = (equal_flow[0, ...] != 0) + (equal_flow[1, ...] != 0)
+    #     residues_flow = (self.flow - equal_flow) * mask
+    #     residues_flow = residues_flow.cpu().detach().numpy().ravel() / (mask.sum().cpu().detach().numpy()**0.5 + 1.)
+    #
+    #     if flag == 1:
+    #         return residues_flow
+    #
+    #     # reprojection error
+    #     error_cur = self.point2d_cur[indices, :] - cur_uv
+    #     error_next = self.point2d_next[indices, :] - next_uv
+    #
+    #     residues_reproj = np.concatenate((error_cur.ravel() / cur_uv.shape[0] ** 0.5,
+    #                                       error_next.ravel() / next_uv.shape[0] ** 0.5))
+    #
+    #     # print(np.sum(np.square(residues_flow)),
+    #     #       np.sum(np.square(error_cur.ravel())).astype(float),
+    #     #       np.sum(np.square(error_next.ravel())).astype(float))
+    #
+    #     return np.concatenate((residues_flow, 1e-3 * residues_reproj))
+
     def func(self, parameters, flag=0):
         RT_cur, RT_next = self.xyzrpy2mat(parameters)
 
         equal_flow, cur_uv, next_uv = self.makeEquFLow(RT_cur, RT_next, self.local_map)
 
+        # from flow_viz import flow_to_image
+        # Mask = (equal_flow[0, :, :] != 0) + (equal_flow[1, :, :] != 0)
+        # equal_flow = flow_to_image(equal_flow.permute(1, 2, 0).detach().cpu().numpy())
+        # equal_flow[~Mask.cpu().numpy()] = 0
+        # cv2.imwrite(f"./visualization/equal_flow.png", equal_flow)
+        # optical_flow = flow_to_image(self.flow.permute(1, 2, 0).detach().cpu().numpy())
+        # cv2.imwrite(f"./visualization/optical_flow.png", optical_flow)
+        # sys.exit()
+
         # flow error
         mask = (equal_flow[0, ...] != 0) + (equal_flow[1, ...] != 0)
         residues_flow = (self.flow - equal_flow) * mask
+        # residues_flow = np.linalg.norm(residues_flow.cpu().detach().numpy(), axis=0) / (mask.sum().cpu().detach().numpy() ** 0.5 + 1e-5)
         residues_flow = residues_flow.cpu().detach().numpy() / (mask.sum().cpu().detach().numpy() + 1e-5)
+        # residues_flow = residues_flow + 1 / (residues_flow + 1e-5)
         residues_flow = residues_flow.ravel()
 
         if flag == 1:
@@ -161,7 +199,43 @@ class LSGC:
         error_next = np.linalg.norm(self.point2d_next - next_uv, axis=1) / (next_uv.shape[0] + 1e-5)
         residues_reproj = np.concatenate((error_cur.ravel(), error_next.ravel()))
 
+        # print(np.sum(np.square(residues_flow)),
+        #       np.sum(np.square(error_cur.ravel())).astype(float),
+        #       np.sum(np.square(error_next.ravel())).astype(float))
+
+        # return residues_flow
+        # return residues_reproj
         return np.concatenate((residues_flow, 1e-3 * residues_reproj))
+
+    # def jac(self, parameters):
+    #     J = []
+    #     with ThreadPoolExecutor(max_workers=12) as executor:
+    #         futures = []
+    #         for i in range(len(parameters)):
+    #             def fp(xi, i=i):
+    #                 xx = np.copy(parameters)
+    #                 xx[i] = xi
+    #                 return self.func(xx)
+    #
+    #             future = executor.submit(derivative, fp, parameters[i], dx=1e-6, n=1)
+    #             futures.append(future)
+    #         for future in futures:
+    #             J.append(future.result())
+    #
+    #     J = np.array(J).T
+    #
+    #     # return J
+    #
+    #     m = 12
+    #     # a = 320 * 960 * 2
+    #     b = self.point2d_cur.shape[0] * 2
+    #     c = self.point2d_next.shape[0] * 2
+    #     # n = a + b + c
+    #     n = b + c
+    #     A = lil_matrix((n, m), dtype=int)
+    #     A[:b, :6] = J[:b, :6]
+    #     A[b:, 6:] = J[b:, 6:]
+    #     return A
 
     def jac(self, parameters):
         J = []
@@ -196,13 +270,20 @@ class LSGC:
         next_cameras = torch.cat((next_rt[3:], next_rt[:3]), 0)
 
         x0 = torch.hstack((cur_cameras, next_cameras)).cpu().numpy()
+        # res = minimize(self.func,
+        #                x0,
+        #                method='Nelder-Mead',
+        #                tol=1e-6,
+        #                options={'maxiter': 3000, 'disp': True},
+        #                )
         res = least_squares(self.func, x0,
-                            verbose=0, x_scale='jac',
+                            verbose=1, x_scale='jac',
                             ftol=1e-8, xtol=1e-8, gtol=1e-8,
                             # ftol=1e-12, xtol=1e-12, gtol=1e-12,
                             method='lm', max_nfev=500)
 
         # identify whether overlay exists or not
+        # if np.sum(self.func(res.x, flag=1, indices=tuple(indices))) == 0:
         if count <= 10 and np.sum(self.func(res.x, flag=1)) == 0:
             # print("No overlap", count, "*"*70)
             max_angle = 0.01

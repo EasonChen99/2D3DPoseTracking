@@ -4,7 +4,7 @@ import sys
 from utils_point import mat2euler, euler2mat
 
 
-def VO_pose(prev_img, curr_img, calib):
+def VO_pose(prev_img, curr_img, calib, x, y):
     orb = cv2.SIFT_create()
 
     kp1, des1 = orb.detectAndCompute(prev_img, None)
@@ -25,7 +25,6 @@ def VO_pose(prev_img, curr_img, calib):
     pts2 = np.float32([kp2[m.trainIdx].pt for m in matches])
 
     # When the dataset is KITTI
-    x, y = 28, 140
     calib[2] = calib[2] + 480 - (y + y + 960) / 2.
     calib[3] = calib[3] + 160 - (x + x + 320) / 2.
 
